@@ -29,6 +29,9 @@ interface RegionalAnalysis {
 }
 
 export default function AuroraDashboard() {
+  // Only run on client side to prevent SSR hydration issues
+  const [isClient, setIsClient] = useState(false);
+  
   const [trainingJobs, setTrainingJobs] = useState<TrainingJob[]>([]);
   const [regionalAnalyses, setRegionalAnalyses] = useState<RegionalAnalysis[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('quick_test');
@@ -53,22 +56,19 @@ export default function AuroraDashboard() {
   const [trainingProfiles, setTrainingProfiles] = useState<any>({});
   const [unifiedJobs, setUnifiedJobs] = useState<any[]>([]);
   const [domainDetection, setDomainDetection] = useState<any>(null);
-  const [isClient, setIsClient] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Handle hydration and initialization
+  // Handle client-side hydration
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   // Initialize data loading after hydration
   useEffect(() => {
-    if (isClient && !isInitialized) {
+    if (isClient) {
       loadSampleDatasets();
       loadDomainConfig(selectedDomain);
-      setIsInitialized(true);
     }
-  }, [isClient, isInitialized, selectedDomain]);
+  }, [isClient, selectedDomain]);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -479,8 +479,8 @@ export default function AuroraDashboard() {
     }
   };
 
-  // Don't render until client-side hydration is complete and data is loaded
-  if (!isClient || !isInitialized) {
+  // Don't render until client-side hydration is complete
+  if (!isClient) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
         <div className="text-center">
