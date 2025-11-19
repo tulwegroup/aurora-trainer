@@ -48,11 +48,17 @@ export default function AuroraDashboard() {
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>('');
   const [dataPreview, setDataPreview] = useState<any>(null);
+  const [selectedDomain, setSelectedDomain] = useState<string>('unified');
+  const [domainConfig, setDomainConfig] = useState<any>(null);
+  const [trainingProfiles, setTrainingProfiles] = useState<any>({});
+  const [unifiedJobs, setUnifiedJobs] = useState<any[]>([]);
+  const [domainDetection, setDomainDetection] = useState<any>(null);
 
   // Load sample datasets on component mount
   useEffect(() => {
     loadSampleDatasets();
-  }, []);
+    loadDomainConfig(selectedDomain);
+  }, [selectedDomain]);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -309,6 +315,105 @@ export default function AuroraDashboard() {
     }
   };
 
+  const loadDomainConfig = async (domain: string) => {
+    try {
+      const response = await fetch(`/api/unified-training?action=get_domain_config&domain=${domain}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setDomainConfig(result.domain);
+        setTrainingProfiles(result.profiles);
+        setSampleDatasets(result.sampleDatasets || []);
+      }
+    } catch (error) {
+      console.error('Failed to load domain config:', error);
+    }
+  };
+
+  const autoDetectDomain = async (files: any[], regionContext?: string) => {
+    try {
+      const response = await fetch('/api/unified-training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'auto_detect_domain',
+          files,
+          options: { regionContext }
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setDomainDetection(result);
+        setSelectedDomain(result.detectedDomain);
+        loadDomainConfig(result.detectedDomain);
+      }
+    } catch (error) {
+      console.error('Domain detection failed:', error);
+    }
+  };
+
+  const startUnifiedTraining = async (domain: string, target: string, profile: string, files: any[]) => {
+    try {
+      const response = await fetch('/api/unified-training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start_unified_training',
+          domain,
+          target,
+          profile,
+          files,
+          options: {}
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        pollUnifiedJobStatus(result.jobId);
+      }
+    } catch (error) {
+      console.error('Unified training start error:', error);
+    }
+  };
+
+  const pollUnifiedJobStatus = async (jobId: string) => {
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/unified-training?jobId=${jobId}`);
+        const result = await response.json();
+        
+        if (result.success && result.job) {
+          const job = result.job;
+          
+          setUnifiedJobs(prev => {
+            const existing = prev.find(j => j.id === jobId);
+            if (existing) {
+              return prev.map(j => j.id === jobId ? { ...j, ...job } : j);
+            } else {
+              return [...prev, job];
+            }
+          });
+
+          // Continue polling if job is not completed
+          if (job.status !== 'completed' && job.status !== 'error') {
+            setTimeout(poll, 3000);
+          } else if (job.status === 'completed' && job.results) {
+            // Auto-load results when training completes
+            setActiveResults(job.results);
+            loadVisualizationData(job.results.modelId);
+          }
+        }
+      } catch (error) {
+        console.error('Unified job polling error:', error);
+      }
+    };
+
+    poll();
+  };
+
   const pollJobStatus = async (jobId: string) => {
     const poll = async () => {
       try {
@@ -380,8 +485,12 @@ export default function AuroraDashboard() {
           </div>
         </div>
 
-        <Tabs defaultValue="regions" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs defaultValue="unified" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="unified" className="flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              Unified
+            </TabsTrigger>
             <TabsTrigger value="regions" className="flex items-center gap-2">
               <Map className="w-4 h-4" />
               Regions
@@ -403,6 +512,331 @@ export default function AuroraDashboard() {
               Configuration
             </TabsTrigger>
           </TabsList>
+
+          {/* Unified Training Tab */}
+          <TabsContent value="unified" className="space-y-6">
+            {/* Domain Selection Wizard */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="w-5 h-5" />
+                  Domain Selection Wizard
+                </CardTitle>
+                <CardDescription>
+                  Choose your exploration domain or let Aurora auto-detect from your data
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                      selectedDomain === 'mineral' ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      setSelectedDomain('mineral');
+                      loadDomainConfig('mineral');
+                    }}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <Target className="w-6 h-6 text-yellow-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">Mineral Exploration</h4>
+                        <p className="text-sm text-gray-600">Gold, copper, lithium, etc.</p>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <strong>Focus:</strong> Alteration minerals, structural traps, geochemical halos
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                      selectedDomain === 'hydrocarbon' ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      setSelectedDomain('hydrocarbon');
+                      loadDomainConfig('hydrocarbon');
+                    }}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Database className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">Hydrocarbon Exploration</h4>
+                        <p className="text-sm text-gray-600">Oil, gas, unconventional</p>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <strong>Focus:</strong> Petroleum systems, reservoir quality, seal integrity
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                      selectedDomain === 'unified' ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      setSelectedDomain('unified');
+                      loadDomainConfig('unified');
+                    }}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <Globe className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">Unified Assessment</h4>
+                        <p className="text-sm text-gray-600">Multi-commodity analysis</p>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <strong>Focus:</strong> Overall resource potential, integrated analysis
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-Detection Section */}
+                {uploadedFiles.length > 0 && (
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <h5 className="font-semibold mb-3">Auto-Detect Domain from Data</h5>
+                    <Button 
+                      onClick={() => autoDetectDomain(uploadedFiles)}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <Brain className="w-4 h-4 mr-2" />
+                      Auto-Detect Optimal Domain
+                    </Button>
+                    
+                    {domainDetection && (
+                      <div className="mt-4 p-3 bg-white rounded border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">Detected Domain:</span>
+                          <Badge className="bg-green-100 text-green-800">
+                            {domainDetection.detectedDomain.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Confidence: {(domainDetection.confidence * 100).toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-600 mt-2">
+                          <strong>Recommendation:</strong> {domainDetection.recommendations?.recommendedDomain}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Domain-Specific Sample Datasets */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  {selectedDomain === 'hydrocarbon' ? 'Petroleum' : selectedDomain === 'mineral' ? 'Mineral' : 'Multi-Commodity'} Datasets
+                </CardTitle>
+                <CardDescription>
+                  Ready-to-use datasets for {selectedDomain} exploration
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sampleDatasets.map((dataset) => (
+                    <div key={dataset.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-sm">{dataset.name}</h4>
+                        <Badge className={
+                          dataset.domain === 'hydrocarbon' ? 'bg-green-100 text-green-800' :
+                          dataset.depositType === 'gold' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }>
+                          {dataset.domain?.toUpperCase() || dataset.depositType?.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-3">{dataset.description}</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-3">
+                        <div>📍 {dataset.region}</div>
+                        <div>📊 {dataset.totalWells || dataset.preview?.totalSamples || dataset.samples || 'N/A'} samples</div>
+                        <div>💾 {dataset.size}</div>
+                        <div>📁 {dataset.format}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setSelectedDataset(dataset.id)}
+                          className="flex-1"
+                        >
+                          View Details
+                        </Button>
+                        <Button 
+                          size="sm"
+                          onClick={() => prepareSampleDataset(dataset.id)}
+                          className="flex-1"
+                        >
+                          Use for Training
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Training Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Training Configuration
+                </CardTitle>
+                <CardDescription>
+                  Configure training parameters for {selectedDomain} exploration
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Target Type</label>
+                      <select 
+                        value={selectedTarget}
+                        onChange={(e) => setSelectedTarget(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        {selectedDomain === 'hydrocarbon' ? (
+                          <>
+                            <option value="oil">Oil</option>
+                            <option value="gas">Natural Gas</option>
+                            <option value="unconventional">Unconventional</option>
+                            <option value="condensate">Condensate</option>
+                          </>
+                        ) : selectedDomain === 'mineral' ? (
+                          <>
+                            <option value="gold">Gold</option>
+                            <option value="copper">Copper</option>
+                            <option value="lithium">Lithium</option>
+                            <option value="silver">Silver</option>
+                            <option value="base_metals">Base Metals</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="multi_commodity">Multi-Commodity</option>
+                            <option value="integrated">Integrated Assessment</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Training Profile</label>
+                      <select 
+                        value={selectedProfile}
+                        onChange={(e) => setSelectedProfile(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        {Object.entries(trainingProfiles).map(([key, profile]: [string, any]) => (
+                          <option key={key} value={key}>
+                            {profile.name} ({profile.duration})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {domainConfig && (
+                      <div className="border rounded-lg p-4 bg-blue-50">
+                        <h5 className="font-semibold mb-3">Domain Configuration</h5>
+                        <div className="space-y-2 text-sm">
+                          <div><strong>Focus Areas:</strong></div>
+                          <ul className="ml-4 list-disc">
+                            {domainConfig.focus.map((item: string, i: number) => (
+                              <li key={i}>{item.replace(/_/g, ' ')}</li>
+                            ))}
+                          </ul>
+                          <div className="mt-3"><strong>Expected Outputs:</strong></div>
+                          <ul className="ml-4 list-disc">
+                            {domainConfig.output.map((item: string, i: number) => (
+                              <li key={i}>{item.replace(/_/g, ' ')}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <Button 
+                      onClick={() => startUnifiedTraining(selectedDomain, selectedTarget, selectedProfile, uploadedFiles)}
+                      className="w-full"
+                      disabled={uploadedFiles.length === 0}
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Start {selectedDomain.charAt(0).toUpperCase() + selectedDomain.slice(1)} Training
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Active Unified Training Jobs */}
+            {unifiedJobs.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="w-5 h-5" />
+                    Active {selectedDomain.charAt(0).toUpperCase() + selectedDomain.slice(1)} Training
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {unifiedJobs.map((job) => (
+                      <div key={job.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h5 className="font-semibold">{job.target} - {job.profile}</h5>
+                            <p className="text-sm text-gray-600">
+                              Domain: {job.domain} • Started: {new Date(job.startTime).toLocaleString()}
+                            </p>
+                          </div>
+                          <Badge className={
+                            job.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            job.status === 'training' ? 'bg-blue-100 text-blue-800' :
+                            job.status === 'error' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }>
+                            {job.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                        
+                        <div className="mb-2">
+                          <div className="flex items-center justify-between text-sm mb-1">
+                            <span>{job.currentStep}</span>
+                            <span>{job.progress}%</span>
+                          </div>
+                          <Progress value={job.progress} className="w-full" />
+                        </div>
+                        
+                        {job.status === 'completed' && job.results && (
+                          <div className="mt-3 p-3 bg-green-50 rounded">
+                            <div className="text-sm font-medium text-green-800">
+                              Training completed successfully!
+                            </div>
+                            <div className="text-xs text-green-600 mt-1">
+                              Results available in Results tab
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
           {/* Regions Tab */}
           <TabsContent value="regions" className="space-y-6">
@@ -1048,27 +1482,36 @@ export default function AuroraDashboard() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="text-center p-4 bg-blue-50 rounded-lg">
                         <div className="text-2xl font-bold text-blue-600">
-                          {activeResults.drillTargets?.length || 0}
+                          {activeResults.drillTargets?.length || activeResults.prospects?.length || 0}
                         </div>
-                        <div className="text-sm text-blue-600">Drill Targets</div>
+                        <div className="text-sm text-blue-600">
+                          {activeResults.drillTargets ? 'Drill Targets' : activeResults.prospects ? 'Prospects' : 'Targets'}
+                        </div>
                       </div>
                       <div className="text-center p-4 bg-green-50 rounded-lg">
                         <div className="text-2xl font-bold text-green-600">
-                          {(activeResults.modelResults?.performance?.auc || 0).toFixed(3)}
+                          {(activeResults.modelResults?.performance?.auc || activeResults.performance?.prospectAccuracy || 0).toFixed(3)}
                         </div>
-                        <div className="text-sm text-green-600">Model AUC</div>
+                        <div className="text-sm text-green-600">
+                          {activeResults.performance?.auc ? 'Model AUC' : 'Accuracy'}
+                        </div>
                       </div>
                       <div className="text-center p-4 bg-purple-50 rounded-lg">
                         <div className="text-2xl font-bold text-purple-600">
-                          {activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 0}
+                          {activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 
+                           activeResults.prospects?.filter((p: any) => p.chanceOfSuccess > 0.3)?.length || 0}
                         </div>
-                        <div className="text-sm text-purple-600">High Priority</div>
+                        <div className="text-sm text-purple-600">
+                          {activeResults.drillTargets ? 'High Priority' : 'High Confidence'}
+                        </div>
                       </div>
                       <div className="text-center p-4 bg-orange-50 rounded-lg">
                         <div className="text-2xl font-bold text-orange-600">
-                          {((activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 0) / (activeResults.drillTargets?.length || 1) * 100).toFixed(0)}%
+                          {activeResults.domain === 'hydrocarbon' ? 'Petroleum' : activeResults.domain === 'mineral' ? 'Geological' : 'Resource'} Model
                         </div>
-                        <div className="text-sm text-orange-600">Confidence</div>
+                        <div className="text-sm text-orange-600">
+                          {activeResults.domain?.toUpperCase() || 'MULTI-DOMAIN'}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -1161,34 +1604,55 @@ export default function AuroraDashboard() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Target className="w-5 h-5" />
-                        Priority Drill Targets
+                        {activeResults.drillTargets ? 'Priority Drill Targets' : 'Petroleum Prospects'}
                       </CardTitle>
                       <CardDescription>
-                        AI-generated drilling recommendations
+                        {activeResults.drillTargets ? 'AI-generated drill target recommendations' : 'AI-generated petroleum prospect recommendations'}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {activeResults.drillTargets?.map((target: any, index: number) => (
+                        {(activeResults.drillTargets || activeResults.prospects)?.map((target: any, index: number) => (
                           <div key={target.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                             <div className="flex items-center justify-between mb-2">
                               <h5 className="font-semibold">{target.name}</h5>
                               <Badge className={
-                                target.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                target.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-green-100 text-green-800'
+                                activeResults.drillTargets ? (
+                                  target.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                  target.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                                ) : (
+                                  target.chanceOfSuccess > 0.3 ? 'bg-red-100 text-red-800' :
+                                  target.chanceOfSuccess > 0.2 ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                                )
                               }>
-                                {target.priority.toUpperCase()}
+                                {activeResults.drillTargets ? target.priority.toUpperCase() : 
+                                 target.chanceOfSuccess > 0.3 ? 'HIGH CONFIDENCE' :
+                                 target.chanceOfSuccess > 0.2 ? 'MEDIUM CONFIDENCE' : 'LOW CONFIDENCE'}
                               </Badge>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
-                              <div>Confidence: {(target.confidence * 100).toFixed(1)}%</div>
-                              <div>Depth: {target.depth?.min}-{target.depth?.max}m</div>
-                              <div>Grade: {target.estimatedGrade?.min?.toFixed(1)}-{target.estimatedGrade?.max?.toFixed(1)} g/t</div>
-                              <div>Lat: {target.coordinates?.lat?.toFixed(3)}°</div>
+                              {activeResults.drillTargets ? (
+                                <>
+                                  <div>Confidence: {(target.confidence * 100).toFixed(1)}%</div>
+                                  <div>Depth: {target.depth?.min}-{target.depth?.max}m</div>
+                                  <div>Grade: {target.estimatedGrade?.min?.toFixed(1)}-{target.estimatedGrade?.max?.toFixed(1)} g/t</div>
+                                  <div>Lat: {target.coordinates?.lat?.toFixed(3)}°</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div>Chance of Success: {(target.chanceOfSuccess * 100).toFixed(1)}%</div>
+                                  <div>Reserves: {target.estimatedReserves?.low?.toFixed(0)}-{target.estimatedReserves?.high?.toFixed(0)} MMBOE</div>
+                                  <div>Depth: {target.depth?.top?.toFixed(0)}-{target.depth?.base?.toFixed(0)} ft</div>
+                                  <div>Type: {target.type}</div>
+                                </>
+                              )}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {target.recommendation}
+                              {activeResults.drillTargets ? target.recommendation : 
+                               `Risk Factors: ${target.riskFactors?.join(', ') || 'None identified'}`
+                              }
                             </div>
                           </div>
                         )) || (
@@ -1275,8 +1739,8 @@ export default function AuroraDashboard() {
                   <CardContent>
                     <div className="text-center py-8">
                       <Target className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                      <p className="text-gray-500">Complete regional analysis or training to view targets</p>
-                      <p className="text-xs text-gray-400 mt-2">Regional analysis automatically identifies targets</p>
+                      <p className="text-gray-500">Complete regional analysis or training to view {activeResults.drillTargets ? 'targets' : 'prospects'}</p>
+                      <p className="text-xs text-gray-400 mt-2">Regional analysis automatically identifies {activeResults.drillTargets ? 'drill targets' : 'petroleum prospects'}</p>
                     </div>
                   </CardContent>
                 </Card>

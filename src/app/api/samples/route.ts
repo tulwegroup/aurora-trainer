@@ -1,6 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Sample geological datasets
+// Import hydrocarbon datasets
+const HYDROCARBON_DATASETS = [
+  {
+    id: 'permian_basin',
+    name: 'Permian Basin Unconventional',
+    description: 'Complete unconventional oil and gas dataset from West Texas',
+    region: 'West Texas, USA',
+    domain: 'hydrocarbon',
+    basinType: 'mature_basin',
+    playType: 'unconventional',
+    size: '680 MB',
+    format: 'LAS + CSV + Seismic',
+    files: [
+      {
+        name: 'well_logs.las',
+        type: 'well_data',
+        size: '180 MB',
+        description: 'Gamma ray, resistivity, porosity logs from 245 wells'
+      },
+      {
+        name: 'production_history.csv',
+        type: 'production',
+        size: '45 MB',
+        description: 'Monthly production data for 180 producing wells'
+      },
+      {
+        name: 'seismic_attributes.tif',
+        type: 'seismic',
+        size: '320 MB',
+        description: 'Seismic attribute volumes and structural interpretation'
+      },
+      {
+        name: 'reservoir_properties.csv',
+        type: 'reservoir',
+        size: '67 MB',
+        description: 'Core analysis and reservoir property measurements'
+      },
+      {
+        name: 'sweet_spot_locations.csv',
+        type: 'labels',
+        size: '8 MB',
+        description: 'Known sweet spot locations and production characteristics'
+      }
+    ],
+    metadata: {
+      coordinateSystem: 'NAD83 UTM Zone 14N',
+      resolution: 'Variable',
+      coverage: '2.5° × 2.0°',
+      acquisitionYear: '2020-2024',
+      dataQuality: 'Excellent',
+      wellCount: 245,
+      producingWells: 180
+    },
+    preview: {
+      totalWells: 245,
+      producingWells: 180,
+      averageIP: '850 BOEPD',
+      averageEUR: '450 MBOE',
+      sweetSpots: 23
+    }
+  }
+];
+
+// Sample geological datasets (mineral)
 const SAMPLE_DATASETS = [
   {
     id: 'carlin_trend_sample',
@@ -238,9 +301,14 @@ const SAMPLE_DATASETS = [
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const datasetId = searchParams.get('datasetId');
+  const domain = searchParams.get('domain');
   
   if (datasetId) {
-    const dataset = SAMPLE_DATASETS.find(d => d.id === datasetId);
+    // Search in both mineral and hydrocarbon datasets
+    const mineralDataset = SAMPLE_DATASETS.find(d => d.id === datasetId);
+    const hydrocarbonDataset = HYDROCARBON_DATASETS.find(d => d.id === datasetId);
+    const dataset = mineralDataset || hydrocarbonDataset;
+    
     if (!dataset) {
       return NextResponse.json({ error: 'Dataset not found' }, { status: 404 });
     }
@@ -251,9 +319,17 @@ export async function GET(request: NextRequest) {
     });
   }
   
+  // Return datasets based on domain filter
+  let datasets = SAMPLE_DATASETS;
+  if (domain === 'hydrocarbon') {
+    datasets = HYDROCARBON_DATASETS;
+  } else if (domain === 'unified') {
+    datasets = [...SAMPLE_DATASETS, ...HYDROCARBON_DATASETS];
+  }
+  
   return NextResponse.json({
     success: true,
-    datasets: SAMPLE_DATASETS
+    datasets
   });
 }
 
