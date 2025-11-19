@@ -1,13 +1,633 @@
-export default function Home() {
+'use client';
+
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Upload, Play, Settings, BarChart3, Map, FileText, Database, Brain, Target } from 'lucide-react';
+
+interface TrainingJob {
+  id: string;
+  status: 'idle' | 'uploading' | 'preprocessing' | 'training' | 'completed' | 'error';
+  progress: number;
+  depositType?: string;
+  profile: string;
+  currentStep?: string;
+  results?: any;
+}
+
+interface RegionalAnalysis {
+  id: string;
+  regionName: string;
+  status: string;
+  progress: number;
+  currentStep: string;
+  startTime: string;
+  results?: any;
+}
+
+export default function AuroraDashboard() {
+  const [trainingJobs, setTrainingJobs] = useState<TrainingJob[]>([]);
+  const [regionalAnalyses, setRegionalAnalyses] = useState<RegionalAnalysis[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState('quick_test');
+  const [selectedTarget, setSelectedTarget] = useState('gold');
+  const [selectedRegion, setSelectedRegion] = useState('');
+  const [analysisType, setAnalysisType] = useState('quick');
+
+  const startRegionalAnalysis = async (regionName: string) => {
+    try {
+      const response = await fetch('/api/region-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'start_analysis',
+          regionName,
+          bounds: getRegionBounds(regionName),
+          options: { analysisType }
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Start polling for analysis status
+        pollAnalysisStatus(result.analysisId);
+        setSelectedRegion(regionName);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Regional analysis start error:', error);
+      alert('Failed to start regional analysis: ' + error.message);
+    }
+  };
+
+  const startSelectedRegionAnalysis = () => {
+    if (selectedRegion) {
+      startRegionalAnalysis(selectedRegion);
+    }
+  };
+
+  const startCustomRegion = () => {
+    alert('Custom region selection coming soon!');
+  };
+
+  const getRegionBounds = (regionName: string): [number, number, number, number] => {
+    const bounds: Record<string, [number, number, number, number]> = {
+      carlin_trend: [-116.5, 40.5, -115.5, 41.0],
+      witwatersrand: [26.0, -27.0, 28.5, -25.5],
+      chile_porphyry: [-71.0, -33.0, -69.0, -31.0]
+    };
+    return bounds[regionName] || [0, 0, 1, 1];
+  };
+
+  const pollAnalysisStatus = async (analysisId: string) => {
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/region-analysis?analysisId=${analysisId}`);
+        const result = await response.json();
+        
+        if (result.success && result.analysis) {
+          const analysis = result.analysis;
+          
+          setRegionalAnalyses(prev => {
+            const existing = prev.find(a => a.id === analysisId);
+            if (existing) {
+              return prev.map(a => a.id === analysisId ? { ...a, ...analysis } : a);
+            } else {
+              return [...prev, analysis];
+            }
+          });
+
+          // Continue polling if analysis is not completed
+          if (analysis.status !== 'completed' && analysis.status !== 'error') {
+            setTimeout(poll, 3000);
+          }
+        }
+      } catch (error) {
+        console.error('Analysis polling error:', error);
+      }
+    };
+
+    poll();
+  };
+
+  const getStatusColor = (status: TrainingJob['status']) => {
+    switch (status) {
+      case 'completed': return 'bg-green-500';
+      case 'training': return 'bg-blue-500';
+      case 'preprocessing': return 'bg-yellow-500';
+      case 'error': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getStatusText = (status: TrainingJob['status']) => {
+    switch (status) {
+      case 'completed': return 'Completed';
+      case 'training': return 'Training';
+      case 'preprocessing': return 'Preprocessing';
+      case 'error': return 'Error';
+      default: return 'Idle';
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-4">
-      <div className="relative w-24 h-24 md:w-32 md:h-32">
-        <img
-          src="/logo.svg"
-          alt="Z.ai Logo"
-          className="w-full h-full object-contain"
-        />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-blue-600 rounded-lg">
+              <Brain className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Aurora OSI Training Agent</h1>
+              <p className="text-slate-600">Automated Geological Data Processing & Model Training</p>
+            </div>
+          </div>
+        </div>
+
+        <Tabs defaultValue="regions" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="regions" className="flex items-center gap-2">
+              <Map className="w-4 h-4" />
+              Regions
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Data Upload
+            </TabsTrigger>
+            <TabsTrigger value="training" className="flex items-center gap-2">
+              <Play className="w-4 h-4" />
+              Training
+            </TabsTrigger>
+            <TabsTrigger value="results" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Results
+            </TabsTrigger>
+            <TabsTrigger value="config" className="flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              Configuration
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Regions Tab */}
+          <TabsContent value="regions" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Region Gallery */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Map className="w-5 h-5" />
+                    Regional Analysis Gallery
+                  </CardTitle>
+                  <CardDescription>
+                    One-click analysis for world-class mineral districts
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => startRegionalAnalysis('carlin_trend')}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Carlin Trend, Nevada</h4>
+                        <Badge className="bg-yellow-100 text-yellow-800">Gold</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        World-class Carlin-type gold deposits
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>3 known deposits</span>
+                        <span>•</span>
+                        <span>1°×0.5° area</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => startRegionalAnalysis('witwatersrand')}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Witwatersrand Basin</h4>
+                        <Badge className="bg-green-100 text-green-800">Paleoplacer</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Ancient placer gold deposits in South Africa
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>2 known deposits</span>
+                        <span>•</span>
+                        <span>2.5°×1.5° area</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => startRegionalAnalysis('chile_porphyry')}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Chilean Porphyry Belt</h4>
+                        <Badge className="bg-blue-100 text-blue-800">Porphyry</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Major porphyry copper-molybdenum deposits
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>2 known deposits</span>
+                        <span>•</span>
+                        <span>2°×2° area</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => startCustomRegion()}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Custom Region</h4>
+                        <Badge variant="outline">New</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Define your own area of interest
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>Any location</span>
+                        <span>•</span>
+                        <span>Custom bounds</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Quick Start Panel */}
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Start Analysis</CardTitle>
+                    <CardDescription>
+                      One-click regional exploration
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Select Region</label>
+                      <select 
+                        value={selectedRegion}
+                        onChange={(e) => setSelectedRegion(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        <option value="">Choose a region...</option>
+                        <option value="carlin_trend">Carlin Trend, Nevada</option>
+                        <option value="witwatersrand">Witwatersrand Basin</option>
+                        <option value="chile_porphyry">Chilean Porphyry Belt</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Analysis Type</label>
+                      <select 
+                        value={analysisType}
+                        onChange={(e) => setAnalysisType(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        <option value="quick">Quick Analysis (2-3 hours)</option>
+                        <option value="standard">Standard Analysis (6-8 hours)</option>
+                        <option value="comprehensive">Comprehensive (12-24 hours)</option>
+                      </select>
+                    </div>
+                    <Button 
+                      onClick={startSelectedRegionAnalysis}
+                      disabled={!selectedRegion}
+                      className="w-full"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Start Regional Analysis
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Active Analyses</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {regionalAnalyses.length === 0 ? (
+                        <p className="text-gray-500 text-center py-4">No analyses running</p>
+                      ) : (
+                        regionalAnalyses.map((analysis) => (
+                          <div key={analysis.id} className="p-3 border rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-sm">{analysis.regionName}</span>
+                              <Badge variant={analysis.status === 'completed' ? 'default' : 'secondary'}>
+                                {analysis.status}
+                              </Badge>
+                            </div>
+                            <Progress value={analysis.progress} className="h-2 mb-1" />
+                            <p className="text-xs text-gray-500">{analysis.currentStep}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Data Upload Tab */}
+          <TabsContent value="upload" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Data Ingestion
+                </CardTitle>
+                <CardDescription>
+                  Upload geological data in any format. Auto-detection enabled.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300">
+                  <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-600 mb-2">
+                    Drag & drop geological data files here, or click to select
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Supports: GeoTIFF, CSV, Shapefile, LAS, NetCDF, SEG-Y
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Training Tab */}
+          <TabsContent value="training" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Training Configuration */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Training Configuration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Target Deposit Type</label>
+                    <select 
+                      value={selectedTarget}
+                      onChange={(e) => setSelectedTarget(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="gold">Gold</option>
+                      <option value="copper">Copper</option>
+                      <option value="porphyry">Porphyry</option>
+                      <option value="epithermal">Epithermal</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Training Profile</label>
+                    <select 
+                      value={selectedProfile}
+                      onChange={(e) => setSelectedProfile(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="quick_test">Quick Test (1-2 hours)</option>
+                      <option value="standard">Standard (6-12 hours)</option>
+                      <option value="production">Production (24-48 hours)</option>
+                    </select>
+                  </div>
+                  <Button className="w-full">
+                    <Play className="w-4 h-4 mr-2" />
+                    Start Training
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Training Jobs */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="w-5 h-5" />
+                    Training Jobs
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {trainingJobs.length === 0 ? (
+                      <p className="text-gray-500 text-center py-8">No training jobs started</p>
+                    ) : (
+                      trainingJobs.map((job) => (
+                        <div key={job.id} className="border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${getStatusColor(job.status)}`} />
+                              <div>
+                                <p className="font-medium">{job.depositType?.toUpperCase() || 'UNKNOWN'} Training</p>
+                                <p className="text-sm text-gray-500">{job.profile} profile</p>
+                              </div>
+                            </div>
+                            <Badge variant="outline">
+                              {getStatusText(job.status)}
+                            </Badge>
+                          </div>
+                          <Progress value={job.progress} className="h-2 mb-2" />
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500">{Math.round(job.progress)}% complete</p>
+                            {job.currentStep && (
+                              <p className="text-xs text-blue-600">{job.currentStep}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Results Tab */}
+          <TabsContent value="results" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Map className="w-5 h-5" />
+                    Prospectivity Maps
+                  </CardTitle>
+                  <CardDescription>
+                    Interactive 3D prospectivity visualization
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <Map className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                      <p className="text-gray-500">Complete training to generate maps</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5" />
+                    Drill Targets
+                  </CardTitle>
+                  <CardDescription>
+                    AI-generated drill target recommendations
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8">
+                    <Target className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                    <p className="text-gray-500">Complete training to view targets</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Configuration Tab */}
+          <TabsContent value="config" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Deposit Type Templates
+                  </CardTitle>
+                  <CardDescription>
+                    Pre-configured models for different deposit types
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Orogenic Gold</h4>
+                        <Badge variant="outline">Structure-focused</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Deep crustal fault systems and shear zones
+                      </p>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-gray-700">Key Features:</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className="text-xs">Structure</Badge>
+                          <Badge variant="secondary" className="text-xs">Alteration</Badge>
+                          <Badge variant="secondary" className="text-xs">Geochemistry</Badge>
+                        </div>
+                      </div>
+                      <div className="space-y-2 mt-3">
+                        <p className="text-xs font-medium text-gray-700">Preferred Data:</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className="text-xs">Magnetics</Badge>
+                          <Badge variant="outline" className="text-xs">Gravity</Badge>
+                          <Badge variant="outline" className="text-xs">Hyperspectral</Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold">Porphyry Copper</h4>
+                        <Badge variant="outline">Alteration-focused</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Large-scale intrusion-related systems
+                      </p>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-gray-700">Key Features:</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className="text-xs">Alteration Zoning</Badge>
+                          <Badge variant="secondary" className="text-xs">Magnetic Lows</Badge>
+                          <Badge variant="secondary" className="text-xs">Geochemical Halos</Badge>
+                        </div>
+                      </div>
+                      <div className="space-y-2 mt-3">
+                        <p className="text-xs font-medium text-gray-700">Preferred Data:</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className="text-xs">Hyperspectral</Badge>
+                          <Badge variant="outline" className="text-xs">Geochemistry</Badge>
+                          <Badge variant="outline" className="text-xs">Magnetics</Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Training Profiles</CardTitle>
+                    <CardDescription>
+                      Pre-configured training strategies
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">Quick Test</span>
+                          <Badge className="bg-green-100 text-green-800">1-2 hours</Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">Rapid validation with minimal data</p>
+                      </div>
+                      <div className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">Standard</span>
+                          <Badge className="bg-blue-100 text-blue-800">6-12 hours</Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">Balanced approach for production</p>
+                      </div>
+                      <div className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">Production</span>
+                          <Badge className="bg-purple-100 text-purple-800">24-48 hours</Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">High-confidence comprehensive model</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quality Gates</CardTitle>
+                    <CardDescription>
+                      Automated quality control thresholds
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Data Coverage</span>
+                        <Badge>≥ 95%</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Missing Data</span>
+                        <Badge>≤ 5%</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Model AUC</span>
+                        <Badge>≥ 0.75</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Overfitting</span>
+                        <Badge>≤ 15%</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Geological Score</span>
+                        <Badge>≥ 0.8</Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
-  )
+  );
 }
