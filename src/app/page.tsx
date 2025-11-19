@@ -1,12 +1,27 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, Play, Settings, BarChart3, Map, FileText, Database, Brain, Target, Globe } from 'lucide-react';
+
+// Dynamic import for client-side only rendering
+const AuroraDashboard = dynamic(() => import('./AuroraDashboard'), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
+      <div className="text-center">
+        <Brain className="w-16 h-16 text-blue-600 mb-4 animate-pulse" />
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Aurora Trainer...</h2>
+        <p className="text-gray-600">Initializing unified mineral & hydrocarbon platform</p>
+      </div>
+    </div>
+  )
+});
 
 interface TrainingJob {
   id: string;
