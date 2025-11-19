@@ -42,6 +42,8 @@ export default function AuroraDashboard() {
     maxLon: '',
     maxLat: ''
   });
+  const [activeResults, setActiveResults] = useState<any>(null);
+  const [visualizationData, setVisualizationData] = useState<any>(null);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -151,6 +153,10 @@ export default function AuroraDashboard() {
           // Continue polling if analysis is not completed
           if (analysis.status !== 'completed' && analysis.status !== 'error') {
             setTimeout(poll, 3000);
+          } else if (analysis.status === 'completed' && analysis.results) {
+            // Auto-load results when analysis completes
+            setActiveResults(analysis.results);
+            loadVisualizationData(analysis.results.modelResults?.modelId);
           }
         }
       } catch (error) {
@@ -190,6 +196,21 @@ export default function AuroraDashboard() {
     }
   };
 
+  const loadVisualizationData = async (modelId: string) => {
+    if (!modelId) return;
+    
+    try {
+      const response = await fetch(`/api/results?type=visualization&modelId=${modelId}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setVisualizationData(result.visualization);
+      }
+    } catch (error) {
+      console.error('Failed to load visualization data:', error);
+    }
+  };
+
   const pollJobStatus = async (jobId: string) => {
     const poll = async () => {
       try {
@@ -211,6 +232,10 @@ export default function AuroraDashboard() {
           // Continue polling if job is not completed
           if (job.status !== 'completed' && job.status !== 'error') {
             setTimeout(poll, 2000);
+          } else if (job.status === 'completed' && job.results) {
+            // Auto-load results when training completes
+            setActiveResults(job.results);
+            loadVisualizationData(job.results.modelId);
           }
         }
       } catch (error) {
@@ -283,7 +308,41 @@ export default function AuroraDashboard() {
 
           {/* Regions Tab */}
           <TabsContent value="regions" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Explanation Card */}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-800">
+                <Map className="w-5 h-5" />
+                Regional Analysis vs Training
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold text-blue-700 mb-2">🗺️ Regional Analysis</h4>
+                  <ul className="text-sm text-blue-600 space-y-1">
+                    <li>• Automated analysis of pre-configured mineral districts</li>
+                    <li>• Includes real satellite data acquisition</li>
+                    <li>• Generates drill targets automatically</li>
+                    <li>• Shows results immediately in Results tab</li>
+                    <li>• Best for: Quick exploration of known mineral districts</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-blue-700 mb-2">🤖 Training</h4>
+                  <ul className="text-sm text-blue-600 space-y-1">
+                    <li>• Train custom models with your data</li>
+                    <li>• Upload and process your geological datasets</li>
+                    <li>• Create specialized models for your projects</li>
+                    <li>• Full control over model parameters</li>
+                    <li>• Best for: Custom projects with proprietary data</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Region Gallery */}
               <Card className="lg:col-span-2">
                 <CardHeader>
@@ -633,45 +692,257 @@ export default function AuroraDashboard() {
 
           {/* Results Tab */}
           <TabsContent value="results" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Map className="w-5 h-5" />
-                    Prospectivity Maps
-                  </CardTitle>
-                  <CardDescription>
-                    Interactive 3D prospectivity visualization
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <Map className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                      <p className="text-gray-500">Complete training to generate maps</p>
+            {activeResults ? (
+              <>
+                {/* Results Header */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      Analysis Results
+                    </CardTitle>
+                    <CardDescription>
+                      {activeResults.regionInfo?.name || 'Training Results'} - {activeResults.drillTargets?.length || 0} targets identified
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {activeResults.drillTargets?.length || 0}
+                        </div>
+                        <div className="text-sm text-blue-600">Drill Targets</div>
+                      </div>
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">
+                          {(activeResults.modelResults?.performance?.auc || 0).toFixed(3)}
+                        </div>
+                        <div className="text-sm text-green-600">Model AUC</div>
+                      </div>
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 0}
+                        </div>
+                        <div className="text-sm text-purple-600">High Priority</div>
+                      </div>
+                      <div className="text-center p-4 bg-orange-50 rounded-lg">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {((activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 0) / (activeResults.drillTargets?.length || 1) * 100).toFixed(0)}%
+                        </div>
+                        <div className="text-sm text-orange-600">Confidence</div>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="w-5 h-5" />
-                    Drill Targets
-                  </CardTitle>
-                  <CardDescription>
-                    AI-generated drill target recommendations
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <Target className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                    <p className="text-gray-500">Complete training to view targets</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Interactive 3D Visualization */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Map className="w-5 h-5" />
+                        3D Prospectivity Model
+                      </CardTitle>
+                      <CardDescription>
+                        Interactive geological prospectivity visualization
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="aspect-video bg-gradient-to-br from-slate-900 to-slate-700 rounded-lg relative overflow-hidden">
+                        {/* Simulated 3D Visualization */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center text-white">
+                            <div className="mb-4">
+                              <div className="w-16 h-16 mx-auto bg-blue-500 rounded-full animate-pulse"></div>
+                            </div>
+                            <h4 className="text-lg font-semibold mb-2">3D Geological Model</h4>
+                            <p className="text-sm opacity-75 mb-4">
+                              {visualizationData ? 'Model loaded successfully' : 'Loading visualization...'}
+                            </p>
+                            <div className="flex justify-center gap-2">
+                              <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">
+                                Rotate
+                              </button>
+                              <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">
+                                Zoom
+                              </button>
+                              <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">
+                                Layers
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Overlay controls */}
+                        <div className="absolute top-4 right-4 space-y-2">
+                          <div className="bg-white/10 backdrop-blur-sm rounded p-2 text-white text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                              <span>High Prospectivity</span>
+                            </div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                              <span>Medium Prospectivity</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                              <span>Low Prospectivity</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Layer Controls */}
+                      <div className="mt-4 space-y-2">
+                        <h5 className="font-medium text-sm">Layer Controls</h5>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" defaultChecked className="rounded" />
+                            <span>Prospectivity Map</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" defaultChecked className="rounded" />
+                            <span>Drill Targets</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="rounded" />
+                            <span>Geological Boundaries</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="rounded" />
+                            <span>Structural Features</span>
+                          </label>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Drill Targets */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="w-5 h-5" />
+                        Priority Drill Targets
+                      </CardTitle>
+                      <CardDescription>
+                        AI-generated drilling recommendations
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {activeResults.drillTargets?.map((target: any, index: number) => (
+                          <div key={target.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="font-semibold">{target.name}</h5>
+                              <Badge className={
+                                target.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                target.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
+                              }>
+                                {target.priority.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
+                              <div>Confidence: {(target.confidence * 100).toFixed(1)}%</div>
+                              <div>Depth: {target.depth?.min}-{target.depth?.max}m</div>
+                              <div>Grade: {target.estimatedGrade?.min?.toFixed(1)}-{target.estimatedGrade?.max?.toFixed(1)} g/t</div>
+                              <div>Lat: {target.coordinates?.lat?.toFixed(3)}°</div>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {target.recommendation}
+                            </div>
+                          </div>
+                        )) || (
+                          <div className="text-center py-8 text-gray-500">
+                            No drill targets available
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Performance Metrics */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      Model Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {(activeResults.modelResults?.performance?.auc || 0).toFixed(3)}
+                        </div>
+                        <div className="text-sm text-gray-600">AUC Score</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {((activeResults.modelResults?.performance?.accuracy || 0) * 100).toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Accuracy</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {((activeResults.modelResults?.performance?.precision || 0) * 100).toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Precision</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {((activeResults.modelResults?.performance?.recall || 0) * 100).toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Recall</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Map className="w-5 h-5" />
+                      Prospectivity Maps
+                    </CardTitle>
+                    <CardDescription>
+                      Interactive 3D prospectivity visualization
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <Map className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                        <p className="text-gray-500">Complete regional analysis or training to generate maps</p>
+                        <p className="text-xs text-gray-400 mt-2">Start with the Regions tab for automated analysis</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5" />
+                      Drill Targets
+                    </CardTitle>
+                    <CardDescription>
+                      AI-generated drill target recommendations
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8">
+                      <Target className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                      <p className="text-gray-500">Complete regional analysis or training to view targets</p>
+                      <p className="text-xs text-gray-400 mt-2">Regional analysis automatically identifies targets</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </TabsContent>
 
           {/* Configuration Tab */}
