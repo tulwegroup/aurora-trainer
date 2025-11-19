@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Play, Settings, BarChart3, Map, FileText, Database, Brain, Target } from 'lucide-react';
+import { Upload, Play, Settings, BarChart3, Map, FileText, Database, Brain, Target, Globe } from 'lucide-react';
 
 interface TrainingJob {
   id: string;
@@ -35,6 +35,13 @@ export default function AuroraDashboard() {
   const [selectedTarget, setSelectedTarget] = useState('gold');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [analysisType, setAnalysisType] = useState('quick');
+  const [showCustomRegion, setShowCustomRegion] = useState(false);
+  const [customBounds, setCustomBounds] = useState({
+    minLon: '',
+    minLat: '',
+    maxLon: '',
+    maxLat: ''
+  });
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -58,7 +65,7 @@ export default function AuroraDashboard() {
         pollAnalysisStatus(result.analysisId);
         setSelectedRegion(regionName);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Unknown error');
       }
     } catch (error) {
       console.error('Regional analysis start error:', error);
@@ -66,14 +73,52 @@ export default function AuroraDashboard() {
     }
   };
 
+  const startCustomRegionAnalysis = async () => {
+    if (!customBounds.minLon || !customBounds.minLat || !customBounds.maxLon || !customBounds.maxLat) {
+      alert('Please fill in all coordinate fields');
+      return;
+    }
+
+    try {
+      const bounds = [
+        parseFloat(customBounds.minLon),
+        parseFloat(customBounds.minLat),
+        parseFloat(customBounds.maxLon),
+        parseFloat(customBounds.maxLat)
+      ];
+
+      const response = await fetch('/api/region-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'start_analysis',
+          regionName: 'custom_region',
+          bounds,
+          options: { analysisType }
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        pollAnalysisStatus(result.analysisId);
+        setShowCustomRegion(false);
+        setSelectedRegion('custom_region');
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Custom region analysis error:', error);
+      alert('Failed to start custom region analysis: ' + error.message);
+    }
+  };
+
   const startSelectedRegionAnalysis = () => {
     if (selectedRegion) {
       startRegionalAnalysis(selectedRegion);
     }
-  };
-
-  const startCustomRegion = () => {
-    alert('Custom region selection coming soon!');
   };
 
   const getRegionBounds = (regionName: string): [number, number, number, number] => {
@@ -110,6 +155,66 @@ export default function AuroraDashboard() {
         }
       } catch (error) {
         console.error('Analysis polling error:', error);
+      }
+    };
+
+    poll();
+  };
+
+  const startTraining = async () => {
+    try {
+      const response = await fetch('/api/training', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files: [], // Empty files array for demo
+          depositType: selectedTarget,
+          profile: selectedProfile,
+          options: {}
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Start polling for job status
+        pollJobStatus(result.jobId);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Training start error:', error);
+      alert('Failed to start training: ' + error.message);
+    }
+  };
+
+  const pollJobStatus = async (jobId: string) => {
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/training?jobId=${jobId}`);
+        const result = await response.json();
+        
+        if (result.success && result.job) {
+          const job = result.job;
+          
+          setTrainingJobs(prev => {
+            const existing = prev.find(j => j.id === jobId);
+            if (existing) {
+              return prev.map(j => j.id === jobId ? { ...j, ...job } : j);
+            } else {
+              return [...prev, job];
+            }
+          });
+
+          // Continue polling if job is not completed
+          if (job.status !== 'completed' && job.status !== 'error') {
+            setTimeout(poll, 2000);
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
       }
     };
 
@@ -237,7 +342,7 @@ export default function AuroraDashboard() {
                       </div>
                     </div>
                     
-                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => startCustomRegion()}>
+                    <div className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setShowCustomRegion(true)}>
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold">Custom Region</h4>
                         <Badge variant="outline">New</Badge>
@@ -246,6 +351,7 @@ export default function AuroraDashboard() {
                         Define your own area of interest
                       </p>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Globe className="w-4 h-4 mr-1" />
                         <span>Any location</span>
                         <span>•</span>
                         <span>Custom bounds</span>
@@ -330,6 +436,85 @@ export default function AuroraDashboard() {
             </div>
           </TabsContent>
 
+          {/* Custom Region Modal */}
+          {showCustomRegion && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <CardHeader>
+                  <CardTitle>Define Custom Region</CardTitle>
+                  <CardDescription>
+                    Enter the coordinates for your area of interest
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Min Longitude</label>
+                      <input 
+                        type="number"
+                        value={customBounds.minLon}
+                        onChange={(e) => setCustomBounds(prev => ({ ...prev, minLon: e.target.value }))}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="-116.5"
+                        step="0.001"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Min Latitude</label>
+                      <input 
+                        type="number"
+                        value={customBounds.minLat}
+                        onChange={(e) => setCustomBounds(prev => ({ ...prev, minLat: e.target.value }))}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="40.5"
+                        step="0.001"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Max Longitude</label>
+                      <input 
+                        type="number"
+                        value={customBounds.maxLon}
+                        onChange={(e) => setCustomBounds(prev => ({ ...prev, maxLon: e.target.value }))}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="-115.5"
+                        step="0.001"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Max Latitude</label>
+                      <input 
+                        type="number"
+                        value={customBounds.maxLat}
+                        onChange={(e) => setCustomBounds(prev => ({ ...prev, maxLat: e.target.value }))}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="41.0"
+                        step="0.001"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button 
+                      onClick={startCustomRegionAnalysis}
+                      disabled={!customBounds.minLon || !customBounds.minLat || !customBounds.maxLon || !customBounds.maxLat}
+                      className="flex-1"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Start Analysis
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => setShowCustomRegion(false)}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </div>
+            </div>
+          )}
+
           {/* Data Upload Tab */}
           <TabsContent value="upload" className="space-y-6">
             <Card>
@@ -393,7 +578,10 @@ export default function AuroraDashboard() {
                       <option value="production">Production (24-48 hours)</option>
                     </select>
                   </div>
-                  <Button className="w-full">
+                  <Button 
+                    onClick={startTraining}
+                    className="w-full"
+                  >
                     <Play className="w-4 h-4 mr-2" />
                     Start Training
                   </Button>
