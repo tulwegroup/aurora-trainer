@@ -351,6 +351,8 @@ async function simulateDomainTraining(jobId: string, domain: string, profile: st
     { name: 'Integrated resource ranking', duration: 2000, progress: 100 }
   ];
 
+  const jobStartTime = job.startTime; // Use the stored start time
+
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     
@@ -363,7 +365,7 @@ async function simulateDomainTraining(jobId: string, domain: string, profile: st
 
   // Generate domain-specific results
   const results = domain === 'hydrocarbon' ? {
-    modelId: `hydrocarbon_model_${Date.now()}`,
+    modelId: `hydrocarbon_model_${jobStartTime}`,
     domain,
     architecture: profileConfig?.architecture || 'petroleum_system_transformer',
     performance: {
@@ -375,11 +377,11 @@ async function simulateDomainTraining(jobId: string, domain: string, profile: st
     prospects: generateHydrocarbonProspects(),
     reserveEstimates: generateReserveEstimates(),
     riskAssessment: generateRiskAssessment(),
-    trainingTime: Date.now() - job.startTime,
+    trainingTime: Date.now() - jobStartTime,
     profile,
     target
   } : domain === 'mineral' ? {
-    modelId: `mineral_model_${Date.now()}`,
+    modelId: `mineral_model_${jobStartTime}`,
     domain,
     architecture: profileConfig?.architecture || 'cnn_ensemble',
     performance: {
@@ -389,11 +391,11 @@ async function simulateDomainTraining(jobId: string, domain: string, profile: st
     },
     drillTargets: generateMineralTargets(),
     prospectivityMaps: generateProspectivityMaps(),
-    trainingTime: Date.now() - job.startTime,
+    trainingTime: Date.now() - jobStartTime,
     profile,
     target
   } : {
-    modelId: `unified_model_${Date.now()}`,
+    modelId: `unified_model_${jobStartTime}`,
     domain,
     architecture: profileConfig?.architecture || 'multi_task_transformer',
     performance: {
@@ -403,7 +405,7 @@ async function simulateDomainTraining(jobId: string, domain: string, profile: st
     },
     resourceRankings: generateResourceRankings(),
     integratedPotentialMaps: generateIntegratedMaps(),
-    trainingTime: Date.now() - job.startTime,
+    trainingTime: Date.now() - jobStartTime,
     profile,
     target
   };
