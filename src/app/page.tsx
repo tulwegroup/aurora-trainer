@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,15 @@ export default function AuroraDashboard() {
   });
   const [activeResults, setActiveResults] = useState<any>(null);
   const [visualizationData, setVisualizationData] = useState<any>(null);
+  const [sampleDatasets, setSampleDatasets] = useState<any[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string>('');
+  const [dataPreview, setDataPreview] = useState<any>(null);
+
+  // Load sample datasets on component mount
+  useEffect(() => {
+    loadSampleDatasets();
+  }, []);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -208,6 +217,95 @@ export default function AuroraDashboard() {
       }
     } catch (error) {
       console.error('Failed to load visualization data:', error);
+    }
+  };
+
+  const loadSampleDatasets = async () => {
+    try {
+      const response = await fetch('/api/samples');
+      const result = await response.json();
+      
+      if (result.success) {
+        setSampleDatasets(result.datasets);
+      }
+    } catch (error) {
+      console.error('Failed to load sample datasets:', error);
+    }
+  };
+
+  const prepareSampleDataset = async (datasetId: string) => {
+    try {
+      const response = await fetch('/api/samples', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'prepare_for_training',
+          datasetId
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setDataPreview(result);
+        // Add to uploaded files
+        setUploadedFiles(prev => [...prev, {
+          id: result.trainingDataId,
+          name: result.datasetInfo.name,
+          type: 'sample_dataset',
+          depositType: result.datasetInfo.depositType,
+          samples: result.datasetInfo.totalSamples,
+          status: 'ready_for_training'
+        }]);
+      }
+    } catch (error) {
+      console.error('Failed to prepare dataset:', error);
+    }
+  };
+
+  const handleFileUpload = async (files: FileList) => {
+    const fileArray = Array.from(files);
+    
+    for (const file of fileArray) {
+      // Simulate file upload and validation
+      const uploadedFile = {
+        id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: file.name,
+        size: file.size,
+        type: file.name.endsWith('.csv') ? 'geochemistry' :
+              file.name.endsWith('.tif') ? 'geophysics' :
+              file.name.endsWith('.shp') ? 'structure' : 'other',
+        status: 'uploaded',
+        uploadTime: new Date().toISOString()
+      };
+      
+      setUploadedFiles(prev => [...prev, uploadedFile]);
+    }
+  };
+
+  const startTrainingWithUploadedData = async (fileId: string) => {
+    const file = uploadedFiles.find(f => f.id === fileId);
+    if (!file) return;
+    
+    try {
+      const response = await fetch('/api/training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: [file],
+          depositType: file.depositType || selectedTarget,
+          profile: selectedProfile,
+          options: {}
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        pollJobStatus(result.jobId);
+      }
+    } catch (error) {
+      console.error('Training start error:', error);
     }
   };
 
@@ -576,33 +674,274 @@ export default function AuroraDashboard() {
 
           {/* Data Upload Tab */}
           <TabsContent value="upload" className="space-y-6">
+          {/* Sample Datasets Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="w-5 h-5" />
+                Sample Geological Datasets
+              </CardTitle>
+              <CardDescription>
+                Ready-to-use geological datasets from world-class mineral districts
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sampleDatasets.map((dataset) => (
+                  <div key={dataset.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-sm">{dataset.name}</h4>
+                      <Badge className={
+                        dataset.depositType === 'gold' ? 'bg-yellow-100 text-yellow-800' :
+                        dataset.depositType === 'copper' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }>
+                        {dataset.depositType.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-3">{dataset.description}</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-3">
+                      <div>📍 {dataset.region}</div>
+                      <div>📊 {dataset.totalSamples || dataset.preview?.totalSamples || 'N/A'} samples</div>
+                      <div>💾 {dataset.size}</div>
+                      <div>📁 {dataset.format}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setSelectedDataset(dataset.id)}
+                        className="flex-1"
+                      >
+                        View Details
+                      </Button>
+                      <Button 
+                        size="sm"
+                        onClick={() => prepareSampleDataset(dataset.id)}
+                        className="flex-1"
+                      >
+                        Use for Training
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* File Upload Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                Upload Your Data
+              </CardTitle>
+              <CardDescription>
+                Upload geological data in any format. Auto-detection enabled.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div 
+                className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 hover:border-gray-400 transition-colors cursor-pointer"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleFileUpload(e.dataTransfer.files);
+                }}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.multiple = true;
+                  input.accept = '.csv,.tif,.tiff,.shp,.las,.nc,.sgy';
+                  input.onchange = (e) => handleFileUpload((e.target as HTMLInputElement).files!);
+                  input.click();
+                }}
+              >
+                <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-600 mb-2">
+                  Drag & drop geological data files here, or click to select
+                </p>
+                <p className="text-sm text-gray-500">
+                  Supports: GeoTIFF, CSV, Shapefile, LAS, NetCDF, SEG-Y
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Uploaded Files Section */}
+          {uploadedFiles.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Uploaded Data
+                </CardTitle>
+                <CardDescription>
+                  Manage and train models with your uploaded datasets
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {uploadedFiles.map((file) => (
+                    <div key={file.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h5 className="font-semibold">{file.name}</h5>
+                          <p className="text-sm text-gray-600">
+                            {file.type === 'sample_dataset' ? 'Sample Dataset' : 'Uploaded File'} • 
+                            {file.samples ? ` ${file.samples} samples` : ` ${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {file.depositType && (
+                            <Badge variant="outline">{file.depositType}</Badge>
+                          )}
+                          <Badge className={
+                            file.status === 'ready_for_training' ? 'bg-green-100 text-green-800' :
+                            'bg-blue-100 text-blue-800'
+                          }>
+                            {file.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      </div>
+                      {file.status === 'ready_for_training' && (
+                        <div className="flex gap-2 mt-3">
+                          <Button 
+                            size="sm"
+                            onClick={() => startTrainingWithUploadedData(file.id)}
+                            className="flex-1"
+                          >
+                            <Play className="w-4 h-4 mr-2" />
+                            Start Training
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            Preview Data
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Data Preview Section */}
+          {dataPreview && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Dataset Preview
+                </CardTitle>
+                <CardDescription>
+                  {dataPreview.datasetInfo.name} - Ready for training
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {dataPreview.datasetInfo.totalSamples}
+                    </div>
+                    <div className="text-sm text-blue-600">Total Samples</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">
+                      {dataPreview.datasetInfo.positiveCases}
+                    </div>
+                    <div className="text-sm text-green-600">Positive Cases</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {dataPreview.datasetInfo.features.length}
+                    </div>
+                    <div className="text-sm text-purple-600">Features</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {((dataPreview.datasetInfo.positiveCases / dataPreview.datasetInfo.totalSamples) * 100).toFixed(1)}%
+                    </div>
+                    <div className="text-sm text-orange-600">Positive Rate</div>
+                  </div>
+                </div>
+                
+                <div className="border rounded-lg p-4">
+                  <h5 className="font-semibold mb-3">Preprocessing Results</h5>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(dataPreview.preprocessingResults).map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-gray-700">{key.replace(/([A-Z])/g, ' $1').trim()}: {String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+          {/* Training Tab */}
+          <TabsContent value="training" className="space-y-6">
+          {/* Data Selection Section */}
+          {uploadedFiles.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="w-5 h-5" />
-                  Data Ingestion
+                  Select Training Data
                 </CardTitle>
                 <CardDescription>
-                  Upload geological data in any format. Auto-detection enabled.
+                  Choose from your uploaded datasets or sample data to train models
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300">
-                  <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-600 mb-2">
-                    Drag & drop geological data files here, or click to select
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Supports: GeoTIFF, CSV, Shapefile, LAS, NetCDF, SEG-Y
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {uploadedFiles.filter(f => f.status === 'ready_for_training').map((file) => (
+                    <div 
+                      key={file.id} 
+                      className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                        selectedTarget === file.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => setSelectedTarget(file.id)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="font-semibold">{file.name}</h5>
+                        <Badge variant="outline">{file.depositType}</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        {file.samples} samples • Ready for training
+                      </p>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Preview functionality
+                          }}
+                        >
+                          Preview
+                        </Button>
+                        <Button 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startTrainingWithUploadedData(file.id);
+                          }}
+                        >
+                          Train Model
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
 
-          {/* Training Tab */}
-          <TabsContent value="training" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Training Configuration */}
               <Card>
                 <CardHeader>
