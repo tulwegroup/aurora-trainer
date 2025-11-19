@@ -54,19 +54,21 @@ export default function AuroraDashboard() {
   const [unifiedJobs, setUnifiedJobs] = useState<any[]>([]);
   const [domainDetection, setDomainDetection] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Handle hydration
+  // Handle hydration and initialization
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Load sample datasets on component mount
+  // Initialize data loading after hydration
   useEffect(() => {
-    if (isClient) {
+    if (isClient && !isInitialized) {
       loadSampleDatasets();
       loadDomainConfig(selectedDomain);
+      setIsInitialized(true);
     }
-  }, [isClient, selectedDomain]);
+  }, [isClient, isInitialized, selectedDomain]);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -477,8 +479,8 @@ export default function AuroraDashboard() {
     }
   };
 
-  // Don't render until client-side hydration is complete
-  if (!isClient) {
+  // Don't render until client-side hydration is complete and data is loaded
+  if (!isClient || !isInitialized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
         <div className="text-center">
