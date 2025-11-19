@@ -1,27 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, Play, Settings, BarChart3, Map, FileText, Database, Brain, Target, Globe } from 'lucide-react';
-
-// Dynamic import for client-side only rendering
-const AuroraDashboard = dynamic(() => import('./AuroraDashboard'), {
-  ssr: false,
-  loading: () => (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
-      <div className="text-center">
-        <Brain className="w-16 h-16 text-blue-600 mb-4 animate-pulse" />
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Aurora Trainer...</h2>
-        <p className="text-gray-600">Initializing unified mineral & hydrocarbon platform</p>
-      </div>
-    </div>
-  )
-});
 
 interface TrainingJob {
   id: string;
@@ -72,9 +57,14 @@ export default function AuroraDashboard() {
   const [unifiedJobs, setUnifiedJobs] = useState<any[]>([]);
   const [domainDetection, setDomainDetection] = useState<any>(null);
 
-  // Handle client-side hydration
+  // Handle client-side hydration with enhanced detection
   useEffect(() => {
-    setIsClient(true);
+    // Ensure we're fully on client side
+    const timer = setTimeout(() => {
+      setIsClient(true);
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   // Initialize data loading after hydration
@@ -494,22 +484,22 @@ export default function AuroraDashboard() {
     }
   };
 
-  // Don't render until client-side hydration is complete
+  // Enhanced loading state to prevent hydration mismatches
   if (!isClient) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
         <div className="text-center">
-          <Brain className="w-16 h-16 text-blue-600 mb-4 animate-pulse" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Aurora Trainer...</h2>
-          <p className="text-gray-600">Initializing unified mineral & hydrocarbon platform</p>
+          <div className="w-16 h-16 bg-blue-600 rounded-full mb-4 animate-pulse mx-auto"></div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Aurora Trainer</h2>
+          <p className="text-gray-600">Initializing platform...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4" suppressHydrationWarning>
+      <div className="max-w-7xl mx-auto" suppressHydrationWarning>
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -683,7 +673,7 @@ export default function AuroraDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {sampleDatasets.map((dataset) => (
+                  {sampleDatasets?.map((dataset) => (
                     <div key={dataset.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold text-sm">{dataset.name}</h4>
@@ -777,7 +767,7 @@ export default function AuroraDashboard() {
                         onChange={(e) => setSelectedProfile(e.target.value)}
                         className="w-full p-2 border rounded-md"
                       >
-                        {Object.entries(trainingProfiles).map(([key, profile]: [string, any]) => (
+                        {trainingProfiles && Object.entries(trainingProfiles).map(([key, profile]: [string, any]) => (
                           <option key={key} value={key}>
                             {profile.name} ({profile.duration})
                           </option>
@@ -793,13 +783,13 @@ export default function AuroraDashboard() {
                         <div className="space-y-2 text-sm">
                           <div><strong>Focus Areas:</strong></div>
                           <ul className="ml-4 list-disc">
-                            {domainConfig.focus.map((item: string, i: number) => (
+                            {domainConfig?.focus?.map((item: string, i: number) => (
                               <li key={i}>{item.replace(/_/g, ' ')}</li>
                             ))}
                           </ul>
                           <div className="mt-3"><strong>Expected Outputs:</strong></div>
                           <ul className="ml-4 list-disc">
-                            {domainConfig.output.map((item: string, i: number) => (
+                            {domainConfig?.output?.map((item: string, i: number) => (
                               <li key={i}>{item.replace(/_/g, ' ')}</li>
                             ))}
                           </ul>
@@ -831,7 +821,7 @@ export default function AuroraDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {unifiedJobs.map((job) => (
+                    {unifiedJobs?.map((job) => (
                       <div key={job.id} className="border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div>
@@ -1045,7 +1035,7 @@ export default function AuroraDashboard() {
                       {regionalAnalyses.length === 0 ? (
                         <p className="text-gray-500 text-center py-4">No analyses running</p>
                       ) : (
-                        regionalAnalyses.map((analysis) => (
+                        regionalAnalyses?.map((analysis) => (
                           <div key={analysis.id} className="p-3 border rounded-lg">
                             <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-sm">{analysis.regionName}</span>
@@ -1159,7 +1149,7 @@ export default function AuroraDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {sampleDatasets.map((dataset) => (
+                {sampleDatasets?.map((dataset) => (
                   <div key={dataset.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-semibold text-sm">{dataset.name}</h4>
@@ -1254,7 +1244,7 @@ export default function AuroraDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {uploadedFiles.map((file) => (
+                  {uploadedFiles?.map((file) => (
                     <div key={file.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -1341,7 +1331,7 @@ export default function AuroraDashboard() {
                 <div className="border rounded-lg p-4">
                   <h5 className="font-semibold mb-3">Preprocessing Results</h5>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    {Object.entries(dataPreview.preprocessingResults).map(([key, value]) => (
+                    {dataPreview?.preprocessingResults && Object.entries(dataPreview.preprocessingResults).map(([key, value]) => (
                       <div key={key} className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                         <span className="text-gray-700">{key.replace(/([A-Z])/g, ' $1').trim()}: {String(value)}</span>
@@ -1370,7 +1360,7 @@ export default function AuroraDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {uploadedFiles.filter(f => f.status === 'ready_for_training').map((file) => (
+                  {uploadedFiles?.filter(f => f.status === 'ready_for_training').map((file) => (
                     <div 
                       key={file.id} 
                       className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -1471,7 +1461,7 @@ export default function AuroraDashboard() {
                     {trainingJobs.length === 0 ? (
                       <p className="text-gray-500 text-center py-8">No training jobs started</p>
                     ) : (
-                      trainingJobs.map((job) => (
+                      trainingJobs?.map((job) => (
                         <div key={job.id} className="border rounded-lg p-4">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
@@ -1523,7 +1513,7 @@ export default function AuroraDashboard() {
                           {activeResults?.drillTargets?.length || activeResults?.prospects?.length || 0}
                         </div>
                         <div className="text-sm text-blue-600">
-                          {activeResults.drillTargets ? 'Drill Targets' : activeResults.prospects ? 'Prospects' : 'Targets'}
+                          {activeResults?.drillTargets ? 'Drill Targets' : activeResults?.prospects ? 'Prospects' : 'Targets'}
                         </div>
                       </div>
                       <div className="text-center p-4 bg-green-50 rounded-lg">
@@ -1540,7 +1530,7 @@ export default function AuroraDashboard() {
                            activeResults?.prospects?.filter((p: any) => p.chanceOfSuccess > 0.3)?.length || 0}
                         </div>
                         <div className="text-sm text-purple-600">
-                          {activeResults.drillTargets ? 'High Priority' : 'High Confidence'}
+                          {activeResults?.drillTargets ? 'High Priority' : 'High Confidence'}
                         </div>
                       </div>
                       <div className="text-center p-4 bg-orange-50 rounded-lg">
@@ -1645,7 +1635,7 @@ export default function AuroraDashboard() {
                         {activeResults?.drillTargets ? 'Priority Drill Targets' : 'Petroleum Prospects'}
                       </CardTitle>
                       <CardDescription>
-                        {activeResults.drillTargets ? 'AI-generated drill target recommendations' : 'AI-generated petroleum prospect recommendations'}
+                        {activeResults?.drillTargets ? 'AI-generated drill target recommendations' : 'AI-generated petroleum prospect recommendations'}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1688,7 +1678,7 @@ export default function AuroraDashboard() {
                               )}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {activeResults.drillTargets ? target.recommendation : 
+                              {activeResults?.drillTargets ? target.recommendation : 
                                `Risk Factors: ${target.riskFactors?.join(', ') || 'None identified'}`
                               }
                             </div>
