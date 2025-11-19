@@ -1475,14 +1475,14 @@ export default function AuroraDashboard() {
                       Analysis Results
                     </CardTitle>
                     <CardDescription>
-                      {activeResults.regionInfo?.name || 'Training Results'} - {activeResults.drillTargets?.length || 0} targets identified
+                      {activeResults?.regionInfo?.name || 'Training Results'} - {activeResults?.drillTargets?.length || activeResults?.prospects?.length || 0} targets identified
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="text-center p-4 bg-blue-50 rounded-lg">
                         <div className="text-2xl font-bold text-blue-600">
-                          {activeResults.drillTargets?.length || activeResults.prospects?.length || 0}
+                          {activeResults?.drillTargets?.length || activeResults?.prospects?.length || 0}
                         </div>
                         <div className="text-sm text-blue-600">
                           {activeResults.drillTargets ? 'Drill Targets' : activeResults.prospects ? 'Prospects' : 'Targets'}
@@ -1498,8 +1498,8 @@ export default function AuroraDashboard() {
                       </div>
                       <div className="text-center p-4 bg-purple-50 rounded-lg">
                         <div className="text-2xl font-bold text-purple-600">
-                          {activeResults.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 
-                           activeResults.prospects?.filter((p: any) => p.chanceOfSuccess > 0.3)?.length || 0}
+                          {activeResults?.drillTargets?.filter((t: any) => t.priority === 'high')?.length || 
+                           activeResults?.prospects?.filter((p: any) => p.chanceOfSuccess > 0.3)?.length || 0}
                         </div>
                         <div className="text-sm text-purple-600">
                           {activeResults.drillTargets ? 'High Priority' : 'High Confidence'}
@@ -1604,7 +1604,7 @@ export default function AuroraDashboard() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Target className="w-5 h-5" />
-                        {activeResults.drillTargets ? 'Priority Drill Targets' : 'Petroleum Prospects'}
+                        {activeResults?.drillTargets ? 'Priority Drill Targets' : 'Petroleum Prospects'}
                       </CardTitle>
                       <CardDescription>
                         {activeResults.drillTargets ? 'AI-generated drill target recommendations' : 'AI-generated petroleum prospect recommendations'}
@@ -1612,12 +1612,12 @@ export default function AuroraDashboard() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {(activeResults.drillTargets || activeResults.prospects)?.map((target: any, index: number) => (
+                        {(activeResults?.drillTargets || activeResults?.prospects)?.map((target: any, index: number) => (
                           <div key={target.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                             <div className="flex items-center justify-between mb-2">
                               <h5 className="font-semibold">{target.name}</h5>
                               <Badge className={
-                                activeResults.drillTargets ? (
+                                activeResults?.drillTargets ? (
                                   target.priority === 'high' ? 'bg-red-100 text-red-800' :
                                   target.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                                   'bg-green-100 text-green-800'
@@ -1627,13 +1627,13 @@ export default function AuroraDashboard() {
                                   'bg-green-100 text-green-800'
                                 )
                               }>
-                                {activeResults.drillTargets ? target.priority.toUpperCase() : 
+                                {activeResults?.drillTargets ? target.priority.toUpperCase() : 
                                  target.chanceOfSuccess > 0.3 ? 'HIGH CONFIDENCE' :
                                  target.chanceOfSuccess > 0.2 ? 'MEDIUM CONFIDENCE' : 'LOW CONFIDENCE'}
                               </Badge>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
-                              {activeResults.drillTargets ? (
+                              {activeResults?.drillTargets ? (
                                 <>
                                   <div>Confidence: {(target.confidence * 100).toFixed(1)}%</div>
                                   <div>Depth: {target.depth?.min}-{target.depth?.max}m</div>
@@ -1739,8 +1739,8 @@ export default function AuroraDashboard() {
                   <CardContent>
                     <div className="text-center py-8">
                       <Target className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                      <p className="text-gray-500">Complete regional analysis or training to view {activeResults.drillTargets ? 'targets' : 'prospects'}</p>
-                      <p className="text-xs text-gray-400 mt-2">Regional analysis automatically identifies {activeResults.drillTargets ? 'drill targets' : 'petroleum prospects'}</p>
+                      <p className="text-gray-500">Complete regional analysis or training to view {activeResults?.drillTargets ? 'targets' : 'prospects'}</p>
+                      <p className="text-xs text-gray-400 mt-2">Regional analysis automatically identifies {activeResults?.drillTargets ? 'drill targets' : 'petroleum prospects'}</p>
                     </div>
                   </CardContent>
                 </Card>
