@@ -601,11 +601,11 @@ function calculateDetectionConfidence(files: any[], domain: string): number {
   return Math.min(0.95, (matchingTypes.length / fileTypes.length) + 0.2);
 }
 
-async function startUnifiedTraining(jobId: string, files: any[], target: string, profile: string, options: any) {
-  const jobId = `unified_job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+async function startUnifiedTraining(domain: string, files: any[], target: string, profile: string, options: any) {
+  const generatedJobId = `unified_job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   const job = {
-    id: jobId,
+    id: generatedJobId,
     domain,
     target,
     profile,
@@ -618,12 +618,12 @@ async function startUnifiedTraining(jobId: string, files: any[], target: string,
     results: null
   };
 
-  trainingJobs.set(jobId, job);
-  simulateDomainTraining(jobId, domain, profile, target);
+  trainingJobs.set(generatedJobId, job);
+  simulateDomainTraining(generatedJobId, domain, profile, target);
 
   return NextResponse.json({
     success: true,
-    jobId,
+    jobId: generatedJobId,
     domain,
     message: `Started ${domain} training for ${target} using ${profile} profile`
   });
