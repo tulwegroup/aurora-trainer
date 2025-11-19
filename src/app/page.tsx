@@ -53,12 +53,20 @@ export default function AuroraDashboard() {
   const [trainingProfiles, setTrainingProfiles] = useState<any>({});
   const [unifiedJobs, setUnifiedJobs] = useState<any[]>([]);
   const [domainDetection, setDomainDetection] = useState<any>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Handle hydration
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Load sample datasets on component mount
   useEffect(() => {
-    loadSampleDatasets();
-    loadDomainConfig(selectedDomain);
-  }, [selectedDomain]);
+    if (isClient) {
+      loadSampleDatasets();
+      loadDomainConfig(selectedDomain);
+    }
+  }, [isClient, selectedDomain]);
 
   const startRegionalAnalysis = async (regionName: string) => {
     try {
@@ -468,6 +476,19 @@ export default function AuroraDashboard() {
       default: return 'Idle';
     }
   };
+
+  // Don't render until client-side hydration is complete
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
+        <div className="text-center">
+          <Brain className="w-16 h-16 text-blue-600 mb-4 animate-pulse" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Aurora Trainer...</h2>
+          <p className="text-gray-600">Initializing unified mineral & hydrocarbon platform</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
